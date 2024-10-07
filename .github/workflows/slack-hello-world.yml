@@ -79,6 +79,7 @@ jobs:
                 const hasChangesInFolder = files.some((file) =>
                     file.filename.includes(folderPath)
                 );
+                console.log({prDetails})
 
                 if ((hasLabel || hasChangesInFolder) && !prDetails.mergeable) {
                     const { data: comments } = await github.rest.issues.listComments({
