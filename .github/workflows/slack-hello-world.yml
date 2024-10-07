@@ -21,6 +21,20 @@ jobs:
             const tag = 'contact-center';
             const folderPath = '.github';
 
+            function formatDate(dateString) {
+              const date = new Date(dateString);
+              date.setHours(date.getHours() + 2); // Convert to GMT+2
+              return date.toLocaleString('en-GB', { 
+                timeZone: 'Etc/GMT-2',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+              });
+            }
+
             // Fetch all open pull requests
             const { data: pullRequests } = await github.rest.pulls.list({
               owner,
@@ -29,10 +43,8 @@ jobs:
             });
 
             const filteredPRs = await Promise.all(pullRequests.map(async pr => {
-              // Check if PR has the specified label
               const hasLabel = pr.labels.some(label => label.name === tag);
               
-              // Check if PR has changes in the specified folder
               const { data: files } = await github.rest.pulls.listFiles({
                 owner,
                 repo,
@@ -40,7 +52,15 @@ jobs:
               });
               const hasChangesInFolder = files.some(file => file.filename.includes(folderPath));
               
-              return (hasLabel || hasChangesInFolder) ? pr : null;
+              if (hasLabel || hasChangesInFolder) {
+                const { data: prDetails } = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: pr.number
+                });
+                return { ...pr, comments: prDetails.comments };
+              }
+              return null;
             }));
 
             const relevantPRs = filteredPRs.filter(pr => pr !== null);
@@ -51,7 +71,8 @@ jobs:
             } else {
               const prList = relevantPRs.map(pr => {
                 const labels = pr.labels.map(label => label.name).join(', ');
-                return `- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login} [${labels}]`;
+                const createdAt = formatDate(pr.created_at);
+                return `- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login} [${labels}] - Created: ${createdAt}, Comments: ${pr.comments}`;
               }).join('\n');
               message = `*Open Pull Requests (${tag} or ${folderPath}):*\n${prList}`;
             }
