@@ -5,7 +5,7 @@ on:
   pull_request:
     types: [opened, synchronize, edited, labeled, unlabeled]
   schedule:
-    - cron: '0 9 * * 1-5'  # Run at 9 AM UTC on weekdays
+    - cron: '0 6,11 * * 1-5'  # Run at 6 AM and 11 AM UTC on weekdays
 
 jobs:
   notify_slack:
@@ -34,6 +34,25 @@ jobs:
               });
             }
 
+            function isOldPR(createdAt) {
+              const now = new Date();
+              const prDate = new Date(createdAt);
+              const isEarlyRun = now.getUTCHours() === 6;
+              
+              if (isEarlyRun) {
+                // For 6 AM run, mark as old if created before 11 AM UTC previous day
+                const cutoffDate = new Date(now);
+                cutoffDate.setUTCDate(cutoffDate.getUTCDate() - 1);
+                cutoffDate.setUTCHours(11, 0, 0, 0);
+                return prDate < cutoffDate;
+              } else {
+                // For 11 AM run, mark as old if created before current day
+                const todayStart = new Date(now);
+                todayStart.setUTCHours(0, 0, 0, 0);
+                return prDate < todayStart;
+              }
+            }
+
             // Fetch all open pull requests
             const { data: pullRequests } = await github.rest.pulls.list({
               owner,
@@ -59,7 +78,7 @@ jobs:
                 });
                 const nonAuthorComments = comments.filter(comment => comment.user.login !== pr.user.login);
                 const commenters = [...new Set(nonAuthorComments.map(comment => comment.user.login))];
-                return { ...pr, comments: nonAuthorComments.length, commenters };
+                return { ...pr, comments: nonAuthorComments.length, commenters, isOld: isOldPR(pr.created_at) };
               }
               return null;
             }));
@@ -75,9 +94,10 @@ jobs:
                 const commentInfo = pr.comments > 0 ? 
                   `Comments: ${pr.comments} (by ${pr.commenters.join(', ')})` : 
                   'No comments';
-                return `- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login} - Created: ${createdAt}, ${commentInfo}`;
+                const oldFlag = pr.isOld ? '🚩 ' : '';
+                return `${oldFlag}- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login} - Created: ${createdAt}, ${commentInfo}`;
               }).join('\n');
-              message = `*Open Pull Requests (${tag} or ${folderPath}):*\n${prList}`;
+              message = `*Open Pull Requests:*\n${prList}`;
             }
 
             // Send the message to Slack via the webhook
