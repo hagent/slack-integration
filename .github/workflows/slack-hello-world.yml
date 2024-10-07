@@ -3,7 +3,9 @@ name: Notify Slack with PR List
 on:
   # Trigger when a PR is created, edited, or synchronized
   pull_request:
-    types: [opened, synchronize, edited]
+    types: [opened, synchronize, edited, labeled, unlabeled]
+  schedule:
+    - cron: '0 6,11 * * 1-5'  # Run at 6 AM and 11 AM UTC on weekdays
 
 jobs:
   notify_slack:
@@ -12,45 +14,129 @@ jobs:
     steps:
       - name: Notify Slack about PRs
         uses: actions/github-script@v6
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
+            const tag = "contact-center";
+            const folderPath = ".github";
 
-            // Fetch all open pull requests
-            const { data: pullRequests } = await github.rest.pulls.list({
-              owner,
-              repo,
-              state: 'open'
-            });
-
-            if (pullRequests.length === 0) {
-              console.log("No open pull requests.");
-              return;
+            function formatDate(dateString) {
+                const date = new Date(dateString);
+                return date.toLocaleString("en-GB", {
+                    timeZone: "Europe/Warsaw",
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                });
             }
 
-            // Format the list of PRs for Slack
-            const prList = pullRequests.map(pr => `- PR #${pr.number}: ${pr.title} by ${pr.user.login} (${pr.html_url})`).join('\n');
-            const message = `*Open Pull Requests:*\n${prList}`;
+            // we run script 2 times, and late run we mark all yesterday's PRs as old
+            // but in first run we mark as old only those that were created before 11 AM UTC yesterday
+            function isOldPR(createdAt) {
+                const now = new Date();
+                const prDate = new Date(createdAt);
+                const isEarlyRun = now.getUTCHours() < 9; // 9 AM UTC
 
-            // Send the message to Slack via the webhook
+                if (isEarlyRun) {
+                    const cutoffDate = new Date(now);
+                    cutoffDate.setUTCDate(cutoffDate.getUTCDate() - 1);
+                    cutoffDate.setUTCHours(11, 0, 0, 0);
+                    return prDate < cutoffDate;
+                } else {
+                    const todayStart = new Date(now);
+                    todayStart.setUTCHours(0, 0, 0, 0);
+                    return prDate < todayStart;
+                }
+            }
+
+            const { data: pullRequests } = await github.rest.pulls.list({
+                owner,
+                repo,
+                state: "open",
+            });
+
+            const filteredPRs = [];
+
+            for (const pr of pullRequests) {
+                const hasLabel = pr.labels.some((label) => label.name === tag);
+
+                const { data: files } = await github.rest.pulls.listFiles({
+                    owner,
+                    repo,
+                    pull_number: pr.number,
+                });
+                const { data: prDetails } = await github.rest.pulls.get({
+                    owner,
+                    repo,
+                    pull_number: pr.number,
+                });
+                const hasChangesInFolder = files.some((file) =>
+                    file.filename.includes(folderPath)
+                );
+                console.log({prDetails})
+
+                if ((hasLabel || hasChangesInFolder) && prDetails.mergeable_state === 'blocked') {
+                    const { data: comments } = await github.rest.issues.listComments({
+                        owner,
+                        repo,
+                        issue_number: pr.number,
+                    });
+                    const nonAuthorComments = comments.filter(
+                        (comment) => comment.user.login !== pr.user.login
+                    );
+                    const commenters = Array.from(
+                        new Set(nonAuthorComments.map((comment) => comment.user.login))
+                    );
+                    filteredPRs.push({
+                        ...pr,
+                        comments: comments.length,
+                        commenters,
+                        isOld: isOldPR(pr.created_at),
+                    });
+                }
+            }
+
+            let message;
+            if (filteredPRs.length === 0) {
+                message = `*Pull Requests to Review:* There are no currently unapproved pull requests to review - well done 🎉`;
+            } else {
+                const prList = filteredPRs
+                    .map((pr) => {
+                        const createdAt = formatDate(pr.created_at);
+                        const commenters = pr.commenters.join(", ");
+                        const commentInfo =
+                            pr.comments > 0
+                                ? `Comments: ${pr.comments} (by ${commenters})`
+                                : "No comments";
+                        const oldFlag = pr.isOld ? "🚩 " : "";
+                        return `${oldFlag}- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login} - Created: ${createdAt}, ${commentInfo}`;
+                    })
+                    .join("\n");
+                message = `*Pull Requests to Review:*\n${prList}`;
+            }
+
             const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL;
 
             try {
-              const response = await fetch(slackWebhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: message })
-              });
+                const response = await fetch(slackWebhookUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: message }),
+                });
 
-              if (!response.ok) {
-                throw new Error(`Slack Webhook request failed with status ${response.status}`);
-              }
+                if (!response.ok) {
+                    throw new Error(
+                        `Slack Webhook request failed with status ${response.status}`
+                    );
+                }
 
-              console.log('PR list sent to Slack.');
+                console.log("PR status sent to Slack.");
             } catch (error) {
-              console.error('Failed to send PR list to Slack:', error.message);
+                console.error("Failed to send PR status to Slack:", error.message);
             }
-
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
