@@ -24,7 +24,7 @@ jobs:
             function formatDate(dateString) {
               const date = new Date(dateString);
               return date.toLocaleString('en-GB', { 
-                timeZone: 'Etc/GMT+2',
+                timeZone: 'Etc/GMT-2',
                 day: '2-digit',
                 month: '2-digit',
                 year: 'numeric',
@@ -40,20 +40,17 @@ jobs:
               const isEarlyRun = now.getUTCHours() === 6;
               
               if (isEarlyRun) {
-                // For 6 AM run, mark as old if created before 11 AM UTC previous day
                 const cutoffDate = new Date(now);
                 cutoffDate.setUTCDate(cutoffDate.getUTCDate() - 1);
                 cutoffDate.setUTCHours(11, 0, 0, 0);
                 return prDate < cutoffDate;
               } else {
-                // For 11 AM run, mark as old if created before current day
                 const todayStart = new Date(now);
                 todayStart.setUTCHours(0, 0, 0, 0);
                 return prDate < todayStart;
               }
             }
 
-            // Fetch all open pull requests
             const { data: pullRequests } = await github.rest.pulls.list({
               owner,
               repo,
@@ -71,14 +68,24 @@ jobs:
               const hasChangesInFolder = files.some(file => file.filename.includes(folderPath));
               
               if (hasLabel || hasChangesInFolder) {
-                const { data: comments } = await github.rest.issues.listComments({
+                const { data: reviews } = await github.rest.pulls.listReviews({
                   owner,
                   repo,
-                  issue_number: pr.number
+                  pull_number: pr.number
                 });
-                const nonAuthorComments = comments.filter(comment => comment.user.login !== pr.user.login);
-                const commenters = [...new Set(nonAuthorComments.map(comment => comment.user.login))];
-                return { ...pr, comments: nonAuthorComments.length, commenters, isOld: isOldPR(pr.created_at) };
+                
+                const isApproved = reviews.some(review => review.state === 'APPROVED');
+                
+                if (!isApproved) {
+                  const { data: comments } = await github.rest.issues.listComments({
+                    owner,
+                    repo,
+                    issue_number: pr.number
+                  });
+                  const nonAuthorComments = comments.filter(comment => comment.user.login !== pr.user.login);
+                  const commenters = [...new Set(nonAuthorComments.map(comment => comment.user.login))];
+                  return { ...pr, comments: nonAuthorComments.length, commenters, isOld: isOldPR(pr.created_at) };
+                }
               }
               return null;
             }));
@@ -89,7 +96,7 @@ jobs:
 
             let message;
             if (relevantPRs.length === 0) {
-              message = `*Open Pull Requests (${tag} or ${folderPath}):*\nThere are currently no open pull requests with the '${tag}' label or changes in '${folderPath}'.`;
+              message = `*Open Pull Requests (${tag} or ${folderPath}):*\nThere are currently no open, unapproved pull requests with the '${tag}' label or changes in '${folderPath}'.`;
             } else {
               const prList = relevantPRs.map(pr => {
                 const createdAt = formatDate(pr.created_at);
