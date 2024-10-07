@@ -85,6 +85,7 @@ jobs:
                     const isApproved = reviews.some(
                         (review) => review.state === "APPROVED"
                     );
+                    console.log({ isApproved });
 
                     if (!isApproved) {
                         const { data: comments } = await github.rest.issues.listComments({
