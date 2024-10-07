@@ -4,6 +4,8 @@ on:
   # Trigger when a PR is created, edited, or synchronized
   pull_request:
     types: [opened, synchronize, edited, labeled, unlabeled]
+  schedule:
+    - cron: '0 9 * * 1-5'  # Run at 9 AM UTC on weekdays
 
 jobs:
   notify_slack:
@@ -29,13 +31,13 @@ jobs:
               pr.labels.map(label => label.name).includes(tag)
             );
 
+            let message;
             if (filteredPRs.length === 0) {
-              console.log("No open pull requests with '${tag}' label.");
-              return;
+              message = `*Open Pull Requests (${tag}):*\nThere are currently no open pull requests with the '${tag}' label.`;
+            } else {
+              const prList = filteredPRs.map(pr => `- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login}`).join('\n');
+              message = `*Open Pull Requests (${tag}):*\n${prList}`;
             }
-
-            const prList = filteredPRs.map(pr => `- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login}`).join('\n');
-            const message = `*Open Pull Requests (Ready for Review):*\n${prList}`;
 
             // Send the message to Slack via the webhook
             const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL;
@@ -51,9 +53,9 @@ jobs:
                 throw new Error(`Slack Webhook request failed with status ${response.status}`);
               }
 
-              console.log('Filtered PR list sent to Slack.');
+              console.log('PR status sent to Slack.');
             } catch (error) {
-              console.error('Failed to send PR list to Slack:', error.message);
+              console.error('Failed to send PR status to Slack:', error.message);
             }
 
         env:
