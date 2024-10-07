@@ -1,0 +1,17 @@
+name: Notify Slack on PR Change
+
+# Trigger the action when a pull request is opened, edited, or synchronized
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Hello World message to Slack
+        run: |
+          curl -X POST -H 'Content-type: application/json' --data '{
+            "text": "Hello World! A pull request was changed."
+          }' ${{ secrets.SLACK_WEBHOOK_URL }}
