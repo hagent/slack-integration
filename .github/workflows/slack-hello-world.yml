@@ -33,7 +33,7 @@ jobs:
             }
 
             // Format the list of PRs for Slack
-            const prList = pullRequests.map(pr => `- (PR #${pr.number}: ${pr.title})[${pr.html_url}] by ${pr.user.login} `).join('\n');
+            const prList = pullRequests.map(pr => `- [PR #${pr.number}: ${pr.title}](${pr.html_url}) by ${pr.user.login} `).join('\n');
             const message = `*Open Pull Requests:*\n${prList}`;
 
             // Send the message to Slack via the webhook
