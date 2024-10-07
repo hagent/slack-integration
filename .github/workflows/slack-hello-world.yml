@@ -81,7 +81,7 @@ jobs:
                 );
                 console.log({prDetails})
 
-                if ((hasLabel || hasChangesInFolder) && !prDetails.mergeable) {
+                if ((hasLabel || hasChangesInFolder) && prDetails.mergeable_state === 'blocked') {
                     const { data: comments } = await github.rest.issues.listComments({
                         owner,
                         repo,
