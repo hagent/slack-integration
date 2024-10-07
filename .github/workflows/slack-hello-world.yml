@@ -82,10 +82,16 @@ jobs:
                         pull_number: pr.number,
                     });
 
+                    const { data: prDetails } = await github.rest.pulls.get({
+                        owner,
+                        repo,
+                        pull_number: pr.number,
+                    });
+
                     const isApproved = reviews.some(
                         (review) => review.state === "APPROVED"
                     );
-                    console.log({ isApproved, reviews });
+                    console.log({ isApproved, reviews, prDetails });
 
                     if (!isApproved) {
                         const { data: comments } = await github.rest.issues.listComments({
