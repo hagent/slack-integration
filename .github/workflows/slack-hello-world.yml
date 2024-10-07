@@ -3,7 +3,7 @@ name: Notify Slack with PR List
 on:
   # Trigger when a PR is created, edited, or synchronized
   pull_request:
-    types: [opened, synchronize, edited]
+    types: [opened, synchronize, edited, labeled, unlabeled]
 
 jobs:
   notify_slack:
@@ -16,6 +16,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
+            const tag = 'contact-center';
 
             // Fetch all open pull requests
             const { data: pullRequests } = await github.rest.pulls.list({
@@ -24,17 +25,17 @@ jobs:
               state: 'open'
             });
 
-            console.log('pullRequests');
-            console.log(pullRequests);
+            const filteredPRs = pullRequests.filter(pr => 
+              pr.labels.map(label => label.name).includes(tag)
+            );
 
-            if (pullRequests.length === 0) {
-              console.log("No open pull requests.");
+            if (filteredPRs.length === 0) {
+              console.log("No open pull requests with '${tag}' label.");
               return;
             }
 
-            // Format the list of PRs for Slack
-            const prList = pullRequests.map(pr => `- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login}`).join('\n');
-            const message = `*Open Pull Requests:*\n${prList}`;
+            const prList = filteredPRs.map(pr => `- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login}`).join('\n');
+            const message = `*Open Pull Requests (Ready for Review):*\n${prList}`;
 
             // Send the message to Slack via the webhook
             const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL;
@@ -50,7 +51,7 @@ jobs:
                 throw new Error(`Slack Webhook request failed with status ${response.status}`);
               }
 
-              console.log('PR list sent to Slack.');
+              console.log('Filtered PR list sent to Slack.');
             } catch (error) {
               console.error('Failed to send PR list to Slack:', error.message);
             }
