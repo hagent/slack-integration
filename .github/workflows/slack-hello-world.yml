@@ -96,7 +96,7 @@ jobs:
 
             let message;
             if (relevantPRs.length === 0) {
-              message = `*Open Pull Requests (${tag} or ${folderPath}):*\nThere are currently no open, unapproved pull requests with the '${tag}' label or changes in '${folderPath}'.`;
+              message = `*Pull Requests to Review (${tag} or ${folderPath}):*\nThere are currently no open, unapproved pull requests with the '${tag}' label or changes in '${folderPath}'.`;
             } else {
               const prList = relevantPRs.map(pr => {
                 const createdAt = formatDate(pr.created_at);
@@ -106,7 +106,7 @@ jobs:
                 const oldFlag = pr.isOld ? '🚩 ' : '';
                 return `${oldFlag}- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login} - Created: ${createdAt}, ${commentInfo}`;
               }).join('\n');
-              message = `*Open Pull Requests:*\n${prList}`;
+              message = `*Pull Requests to Review:*\n${prList}`;
             }
 
             // Send the message to Slack via the webhook
