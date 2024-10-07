@@ -1,17 +1,56 @@
-name: Notify Slack on PR Change
+name: Notify Slack with PR List
 
-# Trigger the action when a pull request is opened, edited, or synchronized
 on:
+  # Trigger when a PR is created, edited, or synchronized
   pull_request:
-    types: [opened, edited, synchronize]
+    types: [opened, synchronize, edited]
 
 jobs:
-  notify:
+  notify_slack:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Send Hello World message to Slack
-        run: |
-          curl -X POST -H 'Content-type: application/json' --data '{
-            "text": "Hello World! A pull request was changed."
-          }' ${{ secrets.SLACK_WEBHOOK_URL }}
+      - name: Notify Slack about PRs
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+
+            // Fetch all open pull requests
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open'
+            });
+
+            if (pullRequests.length === 0) {
+              console.log("No open pull requests.");
+              return;
+            }
+
+            // Format the list of PRs for Slack
+            const prList = pullRequests.map(pr => `- PR #${pr.number}: ${pr.title} by ${pr.user.login} (${pr.html_url})`).join('\n');
+            const message = `*Open Pull Requests:*\n${prList}`;
+
+            // Send the message to Slack via the webhook
+            const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL;
+
+            try {
+              const response = await fetch(slackWebhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: message })
+              });
+
+              if (!response.ok) {
+                throw new Error(`Slack Webhook request failed with status ${response.status}`);
+              }
+
+              console.log('PR list sent to Slack.');
+            } catch (error) {
+              console.error('Failed to send PR list to Slack:', error.message);
+            }
+
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
