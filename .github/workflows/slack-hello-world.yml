@@ -19,6 +19,7 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const tag = 'contact-center';
+            const folderPath = '.github';
 
             // Fetch all open pull requests
             const { data: pullRequests } = await github.rest.pulls.list({
@@ -27,16 +28,32 @@ jobs:
               state: 'open'
             });
 
-            const filteredPRs = pullRequests.filter(pr => 
-              pr.labels.map(label => label.name).includes(tag)
-            );
+            const filteredPRs = await Promise.all(pullRequests.map(async pr => {
+              // Check if PR has the specified label
+              const hasLabel = pr.labels.some(label => label.name === tag);
+              
+              // Check if PR has changes in the specified folder
+              const { data: files } = await github.rest.pulls.listFiles({
+                owner,
+                repo,
+                pull_number: pr.number
+              });
+              const hasChangesInFolder = files.some(file => file.filename.includes(folderPath));
+              
+              return (hasLabel || hasChangesInFolder) ? pr : null;
+            }));
+
+            const relevantPRs = filteredPRs.filter(pr => pr !== null);
 
             let message;
-            if (filteredPRs.length === 0) {
-              message = `*Open Pull Requests (${tag}):*\nThere are currently no open pull requests with the '${tag}' label.`;
+            if (relevantPRs.length === 0) {
+              message = `*Open Pull Requests (${tag} or ${folderPath}):*\nThere are currently no open pull requests with the '${tag}' label or changes in '${folderPath}'.`;
             } else {
-              const prList = filteredPRs.map(pr => `- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login}`).join('\n');
-              message = `*Open Pull Requests (${tag}):*\n${prList}`;
+              const prList = relevantPRs.map(pr => {
+                const labels = pr.labels.map(label => label.name).join(', ');
+                return `- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login} [${labels}]`;
+              }).join('\n');
+              message = `*Open Pull Requests (${tag} or ${folderPath}):*\n${prList}`;
             }
 
             // Send the message to Slack via the webhook
