@@ -53,12 +53,13 @@ jobs:
               const hasChangesInFolder = files.some(file => file.filename.includes(folderPath));
               
               if (hasLabel || hasChangesInFolder) {
-                const { data: prDetails } = await github.rest.pulls.get({
+                const { data: comments } = await github.rest.issues.listComments({
                   owner,
                   repo,
-                  pull_number: pr.number
+                  issue_number: pr.number
                 });
-                return { ...pr, comments: prDetails.comments };
+                const commenters = [...new Set(comments.map(comment => comment.user.login))];
+                return { ...pr, comments: comments.length, commenters };
               }
               return null;
             }));
@@ -72,7 +73,10 @@ jobs:
               const prList = relevantPRs.map(pr => {
                 const labels = pr.labels.map(label => label.name).join(', ');
                 const createdAt = formatDate(pr.created_at);
-                return `- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login} [${labels}] - Created: ${createdAt}, Comments: ${pr.comments}`;
+                const commentInfo = pr.comments > 0 ? 
+                  `Comments: ${pr.comments} (by ${pr.commenters.join(', ')})` : 
+                  'No comments';
+                return `- <${pr.html_url}|PR #${pr.number}: ${pr.title}> by ${pr.user.login} - Created: ${createdAt}, ${commentInfo}`;
               }).join('\n');
               message = `*Open Pull Requests (${tag} or ${folderPath}):*\n${prList}`;
             }
