@@ -71,49 +71,33 @@ jobs:
                     repo,
                     pull_number: pr.number,
                 });
+                const { data: prDetails } = await github.rest.pulls.get({
+                    owner,
+                    repo,
+                    pull_number: pr.number,
+                });
                 const hasChangesInFolder = files.some((file) =>
                     file.filename.includes(folderPath)
                 );
 
-                if (hasLabel || hasChangesInFolder) {
-                    const { data: reviews } = await github.rest.pulls.listReviews({
+                if ((hasLabel || hasChangesInFolder) && !prDetails.mergeable) {
+                    const { data: comments } = await github.rest.issues.listComments({
                         owner,
                         repo,
-                        pull_number: pr.number,
+                        issue_number: pr.number,
                     });
-
-                    const { data: prDetails } = await github.rest.pulls.get({
-                        owner,
-                        repo,
-                        pull_number: pr.number,
-                    });
-
-                    const isApproved = reviews.some(
-                        (review) => review.state === "APPROVED"
+                    const nonAuthorComments = comments.filter(
+                        (comment) => comment.user.login !== pr.user.login
                     );
-                    console.log({ isApproved, reviews, prDetails });
-
-                    if (!isApproved) {
-                        const { data: comments } = await github.rest.issues.listComments({
-                            owner,
-                            repo,
-                            issue_number: pr.number,
-                        });
-                        const nonAuthorComments = comments.filter(
-                            (comment) => comment.user.login !== pr.user.login
-                        );
-                        const commenters = [
-                            ...new Set(
-                                nonAuthorComments.map((comment) => comment.user.login)
-                            ),
-                        ];
-                        filteredPRs.push({
-                            ...pr,
-                            comments: comments.length,
-                            commenters,
-                            isOld: isOldPR(pr.created_at),
-                        });
-                    }
+                    const commenters = Array.from(
+                        new Set(nonAuthorComments.map((comment) => comment.user.login))
+                    );
+                    filteredPRs.push({
+                        ...pr,
+                        comments: comments.length,
+                        commenters,
+                        isOld: isOldPR(pr.created_at),
+                    });
                 }
             }
 
