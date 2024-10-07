@@ -71,7 +71,6 @@ jobs:
               message = `*Open Pull Requests (${tag} or ${folderPath}):*\nThere are currently no open pull requests with the '${tag}' label or changes in '${folderPath}'.`;
             } else {
               const prList = relevantPRs.map(pr => {
-                const labels = pr.labels.map(label => label.name).join(', ');
                 const createdAt = formatDate(pr.created_at);
                 const commentInfo = pr.comments > 0 ? 
                   `Comments: ${pr.comments} (by ${pr.commenters.join(', ')})` : 
