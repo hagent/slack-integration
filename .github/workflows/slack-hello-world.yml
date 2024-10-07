@@ -23,7 +23,6 @@ jobs:
 
             function formatDate(dateString) {
               const date = new Date(dateString);
-              date.setHours(date.getHours() + 2); // Convert to GMT+2
               return date.toLocaleString('en-GB', { 
                 timeZone: 'Etc/GMT+2',
                 day: '2-digit',
