@@ -103,7 +103,7 @@ jobs:
 
             let message;
             if (filteredPRs.length === 0) {
-                message = `*Pull Requests to Review:* There are no currently unapproved pull requests to review - well done 🎉🎉🎉`;
+                message = `*Pull Requests to Review:* There are no currently unapproved pull requests to review - well done 🎉`;
             } else {
                 const prList = filteredPRs
                     .map((pr) => {
